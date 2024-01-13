@@ -75,61 +75,60 @@ tm_shape(idw_mask$predicted) +
 
 writeRaster(idw_mask$predicted, filename = "ssrd_predicted_kWh_final.tif")
 
+## Financial feasibility analysis
 
-##Financial Feasibility Analysis
-# 先定义calc_NPV函数
-calc_NPV <- function(annual_revenue, i=0.05, lifetime_yrs, CAPEX, OPEX=0){
-  costs_op <- rep(OPEX, lifetime_yrs) # 操作成本
-  revenue <- rep(annual_revenue, lifetime_yrs) 
-  t <- seq(1, lifetime_yrs, 1) # 时间序列
-  
-  NPV <- sum((revenue - costs_op) / (1 + i)^t) - CAPEX
+# NPV
+calc_NPV <- function(annual_revenue, discount_rate, lifetime_yrs, CAPEX, OPEX=0) {
+  costs_op <- rep(OPEX, lifetime_yrs)
+  revenue <- rep(annual_revenue, lifetime_yrs)
+  t <- seq(1, lifetime_yrs, 1)
+  NPV <- sum((revenue - costs_op) / (1 + discount_rate)^t) - CAPEX
   return(round(NPV, 2))
 }
 
-# 再定义Life_span_generation_kWH函数
-Life_span_generation_kWH <- function(yearly_generation_kWH, discount, lifetime_yrs){
+# LCOE
+Life_span_generation_kWH <- function(yearly_generation_kWH, discount=0.08, lifetime_yrs) {
   t <- seq(1, lifetime_yrs, 1)
   L_S_G <- sum(yearly_generation_kWH / (1 + discount)^t)
   return(round(L_S_G, 2))
 }
 
-# 再定义LCOE函数
-LCOE <- function(NPV_cost, Life_span_generation){
+
+calc_LCOE <- function(NPV_cost, Life_span_generation) {
   lcoe <- NPV_cost / Life_span_generation
   return(round(lcoe, 2))
 }
 
-# 根据图中的假设设定参数
-area_per_station_km2 = 12  # 每个发电站的面积，单位为平方公里
-sun_hours_per_day = 8  # 每日日照小时数
-avg_generation_potential_kwh_per_m2 = 0.25  # 平均发电潜力，单位为kWh每平方米
-Pr = 0.6  # 性能比
-days_per_year = 365  # 一年的天数
-CAPEX_per_MW = 1.16 * 10^6  # 太阳能装机成本，单位为美元/MW
-OPEX_per_year = 0  # 每年的运营成本
-discount_rate_NPV = 0.05  # NPV的贴现率
-discount_rate_LCOE = 0.08  # LCOE的贴现率
-lifetime_years = 25  # 预计运营年限
+# parameter assumptiom
+area_km2 = 12
+sun_hours_per_day = 8
+yield_per_m2 = 0.25
+days_per_year = 365
+Pr = 0.6
+CAPEX_per_MW = 1.16e6
+life_span_years = 25
+discount_rate_NPV = 0.05
+discount_rate_LCOE = 0.08
+revenue_per_MWh = 103
 
-# 计算每个发电站的安装容量（以兆瓦为单位）
-installed_capacity_MW = (area_per_station_km2 * avg_generation_potential_kwh_per_m2 * 1000000 * Pr) / (sun_hours_per_day * days_per_year)
+peak_generation_MWh = area_km2 * 1e6 * yield_per_m2 / 1000
+installed_capacity_MW = peak_generation_MWh
 
-# 计算CAPEX
 CAPEX = installed_capacity_MW * CAPEX_per_MW
 
-# 计算每个发电站每年的收入
-annual_revenue = installed_capacity_MW * 1000 * sun_hours_per_day * days_per_year * 103
+annual_generation_MWh = installed_capacity_MW * sun_hours_per_day * days_per_year
 
-# 计算每个发电站的NPV
-npv_per_station = calc_NPV(annual_revenue = annual_revenue, i = discount_rate_NPV, lifetime_yrs = lifetime_years, CAPEX = CAPEX, OPEX = OPEX_per_year)
+annual_revenue = annual_generation_MWh * revenue_per_MWh
 
-# 计算每个发电站生命周期内的总发电量
-life_span_generation = Life_span_generation_kWH(yearly_generation_kWH = installed_capacity_MW * 1000 * sun_hours_per_day * days_per_year, discount = discount_rate_LCOE, lifetime_yrs = lifetime_years)
+npv = calc_NPV(annual_revenue, discount_rate_NPV, life_span_years, CAPEX)
 
-# 计算每个发电站的LCOE
-lcoe = LCOE(NPV_cost = CAPEX, Life_span_generation = life_span_generation)
+life_span_generation = Life_span_generation_kWH(annual_generation_MWh, discount_rate_LCOE, life_span_years)
 
-# 打印结果
-print(paste("NPV per station: ", npv_per_station))
-print(paste("LCOE per station: ", lcoe))
+lcoe = calc_LCOE(CAPEX, life_span_generation)
+
+print(paste("Installed capacity per station (MW):", installed_capacity_MW))
+print(paste("CAPEX per station (USD):", CAPEX))
+print(paste("Annual generation per station (MWh):", annual_generation_MWh))
+print(paste("Annual revenue per station (USD):", annual_revenue))
+print(paste("NPV per station (USD):", npv))
+print(paste("LCOE per station (USD/MWh):", lcoe))
